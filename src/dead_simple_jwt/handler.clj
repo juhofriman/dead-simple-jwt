@@ -12,11 +12,16 @@
 ; This is the secret key used in sha1-hmac, it really should not be in code!!
 (def secret-key "wfe249284093roi2j24f8i2j82hvo2824foi2fo2")
 
+(defn unsigned-token
+  [header payload]
+  (str (base64/encode header) "." (base64/encode payload)))
+
 (defn generate-jwt-token
   [username]
   (let [header "{\"alg\": \"HS256\", \"typ\": \"JWT\"}"
-        payload (str "{\"username\":\"" username "\"}")
-        unsigned-token (str (base64/encode header) "." (base64/encode payload))]
+        ; by the spec payload should be json, but let's keep it simple and just write username to payload as a string
+        payload username 
+        unsigned-token (unsigned-token header payload)]
     (str
      (base64/encode header)
      "."
@@ -24,14 +29,19 @@
      "."
      (base64/encode (sha1-hmac unsigned-token secret-key)))))
 
-(defn has-access
+(defn valid-token?
+  [token]
+  (let [[header payload signature] (map base64/decode (clojure.string/split token #"\."))]
+    (= (sha1-hmac (unsigned-token header payload) secret-key) signature)))
+
+(defn valid-credentials?
   [username password]
   (and (contains? user-realm username) (= (get user-realm username) password)))
 
 (defroutes app-routes
   (POST "/authorize"
         [username password]
-        (if (has-access username password)
+        (if (valid-credentials? username password)
           (generate-jwt-token username)
           {:status 403 :body "Invalid credentials"}))
   (GET "/" [] "You have access! This is a secret that should be accessible only with valid credentials")
@@ -39,14 +49,18 @@
 
 (defn has-valid-token
   [{auth-header "authorization"}]
-  (and auth-header (.startsWith auth-header "Bearer")))
+  (and
+   auth-header
+   (.startsWith auth-header "Bearer")
+   (valid-token? (subs auth-header 7))))
 
 (defn wrap-authentication
   [handler]
   (fn [{headers :headers uri :uri :as req}]
-    (if (or (= uri "/authorize") (has-valid-token headers))
-      (handler req)
-      {:status 403 :body "No valid token"})))
+    (cond
+     (= uri "/authorize") (handler req)
+     (has-valid-token headers) (handler req)
+     :else {:status 403 :body "No valid token"})))
 
 (defn wrap-content-type
   [handler content-type]
