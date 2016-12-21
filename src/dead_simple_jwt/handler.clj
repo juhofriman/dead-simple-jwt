@@ -1,15 +1,28 @@
 (ns dead-simple-jwt.handler
   (:require [compojure.core :refer :all]
             [compojure.route :as route]
-            [ring.middleware.params :refer [wrap-params]]))
+            [ring.middleware.params :refer [wrap-params]]
+            [pandect.algo.sha1 :refer [sha1-hmac]]
+            [base64-clj.core :as base64]))
 
 ; Passwords are now just plain text, naturally you need to hash these normally in real scenarios
 (def user-realm {"frank" "viceral"
                  "liza" "necronomicon"})
 
+; This is the secret key used in sha1-hmac, it really should not be in code!!
+(def secret-key "wfe249284093roi2j24f8i2j82hvo2824foi2fo2")
+
 (defn generate-jwt-token
   [username]
-  (str "thiswillbetoken"))
+  (let [header "{\"alg\": \"HS256\", \"typ\": \"JWT\"}"
+        payload (str "{\"username\":\"" username "\"}")
+        unsigned-token (str (base64/encode header) "." (base64/encode payload))]
+    (str
+     (base64/encode header)
+     "."
+     (base64/encode payload)
+     "."
+     (base64/encode (sha1-hmac unsigned-token secret-key)))))
 
 (defn has-access
   [username password]
