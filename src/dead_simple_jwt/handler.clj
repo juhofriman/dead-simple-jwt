@@ -23,9 +23,7 @@
         payload username 
         unsigned-token (unsigned-token header payload)]
     (str
-     (base64/encode header)
-     "."
-     (base64/encode payload)
+     unsigned-token
      "."
      (base64/encode (sha1-hmac unsigned-token secret-key)))))
 
