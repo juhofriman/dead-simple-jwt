@@ -42,7 +42,8 @@
         (if (valid-credentials? username password)
           (generate-jwt-token username)
           {:status 403 :body "Invalid credentials"}))
-  (GET "/" [] "You have access! This is a secret that should be accessible only with valid credentials")
+  (GET "/" {principal :principal}
+       (str "Hello " principal "! You have access! This is a secret that should be accessible only with valid credentials"))
   (route/not-found "Not Found"))
 
 (defn has-valid-token
@@ -52,12 +53,16 @@
    (.startsWith auth-header "Bearer")
    (valid-token? (subs auth-header 7))))
 
+(defn get-token-payload
+  [{auth-header "authorization"}]
+  (base64/decode (second (clojure.string/split (subs auth-header 7) #"\."))))
+
 (defn wrap-authentication
   [handler]
   (fn [{headers :headers uri :uri :as req}]
     (cond
      (= uri "/authorize") (handler req)
-     (has-valid-token headers) (handler req)
+     (has-valid-token headers) (handler (assoc req :principal (get-token-payload headers )))
      :else {:status 403 :body "No valid token"})))
 
 (defn wrap-content-type
